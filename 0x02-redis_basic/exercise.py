@@ -32,6 +32,7 @@ def replay(method: Callable):
         output_str = output_data.decode("utf-8")
         print(f"{key}(*{input_str}) -> {output_str}")
 
+
 def count_calls(method: Callable) -> Callable:
     """
     a system to count how many
