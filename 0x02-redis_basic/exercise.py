@@ -1,59 +1,106 @@
 #!/usr/bin/env python3
 """
-Module that defines a class for interacting with Redis.
+Redis module
 """
-import uuid
+import sys
+from functools import wraps
+from typing import Union, Optional, Callable
+from uuid import uuid4
 import redis
-import functools
-from typing import Callable
+
+UnionOfTypes = Union[str, bytes, int, float]
 
 
 def count_calls(method: Callable) -> Callable:
     """
-    Decorator that counts the number of times a method is called.
-
-    Args:
-        method (Callable): The method to be decorated.
-
-    Returns:
-        Callable: The decorated method.
+    a system to count how many
+    times methods of the Cache class are called.
+    :param method:
+    :return:
     """
-    @functools.wraps(method)
+    key = method.__qualname__
+
+    @wraps(method)
     def wrapper(self, *args, **kwargs):
-        key = method.__qualname__  # Using the qualified name of the method as the key
-        self._redis.incr(key)  # Increment the count for the key in Redis
-        return method(self, *args, **kwargs)  # Call the original method and return its result
+        """
+        Wrap
+        :param self:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        self._redis.incr(key)
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def call_history(method: Callable) -> Callable:
+    """
+    add its input parameters to one list
+    in redis, and store its output into another list.
+    :param method:
+    :return:
+    """
+    key = method.__qualname__
+    i = "".join([key, ":inputs"])
+    o = "".join([key, ":outputs"])
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        """ Wrapp """
+        self._redis.rpush(i, str(args))
+        res = method(self, *args, **kwargs)
+        self._redis.rpush(o, str(res))
+        return res
 
     return wrapper
 
 
 class Cache:
     """
-    Cache class for storing data in Redis.
-
-    Attributes:
-        _redis (redis.Redis): An instance of the Redis client.
+    Cache redis class
     """
 
     def __init__(self):
         """
-        Initializes the Cache object.
-        Creates an instance of the Redis client and flushes the Redis database.
+        constructor of the redis model
         """
         self._redis = redis.Redis()
         self._redis.flushdb()
 
     @count_calls
-    def store(self, data: str) -> str:
+    @call_history
+    def store(self, data: UnionOfTypes) -> str:
         """
-        Stores the input data in Redis with a randomly generated key.
-
-        Args:
-            data (str): The data to be stored in Redis.
-
-        Returns:
-            str: The randomly generated key used to store the data in Redis.
+        generate a random key (e.g. using uuid),
+         store the input data in Redis using the
+          random key and return the key.
+        :param data:
+        :return:
         """
-        key = str(uuid.uuid4())
-        self._redis.set(key, data)
+        key = str(uuid4())
+        self._redis.mset({key: data})
         return key
+
+    def get(self, key: str, fn: Optional[Callable] = None) \
+            -> UnionOfTypes:
+        """
+        convert the data back
+        to the desired format
+        :param key:
+        :param fn:
+        :return:
+        """
+        if fn:
+            return fn(self._redis.get(key))
+        data = self._redis.get(key)
+        return data
+
+    def get_int(self: bytes) -> int:
+        """get a number"""
+        return int.from_bytes(self, sys.byteorder)
+
+    def get_str(self: bytes) -> str:
+        """get a string"""
+        return self.decode("utf-8")
