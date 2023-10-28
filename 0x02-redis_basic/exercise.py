@@ -11,6 +11,27 @@ import redis
 UnionOfTypes = Union[str, bytes, int, float]
 
 
+def replay(method: Callable):
+    """
+    Display the history of calls of a particular function.
+
+    Args:
+        method (Callable): The method to display the history for.
+    """
+    key = method.__qualname__
+    input_key = f"{key}:inputs"
+    output_key = f"{key}:outputs"
+
+    inputs = cache._redis.lrange(input_key, 0, -1)
+    outputs = cache._redis.lrange(output_key, 0, -1)
+
+    print(f"{key} was called {len(inputs)} times:")
+
+    for input_data, output_data in zip(inputs, outputs):
+        input_str = input_data.decode("utf-8")
+        output_str = output_data.decode("utf-8")
+        print(f"{key}(*{input_str}) -> {output_str}")
+
 def count_calls(method: Callable) -> Callable:
     """
     a system to count how many
